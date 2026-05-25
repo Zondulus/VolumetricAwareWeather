@@ -29,6 +29,9 @@ namespace StormWinds
         private float gustInterval = 3.0f;
         private float gustLerpSpeed = 2.0f;
         private float maxStormThickness = 4000f;
+        private float groundWindFraction = 0.25f;
+        private float fadeStartAlt = 0f;
+        private float fadeEndAlt = 250f;
         private bool debugMode = false;
 
         // -----------------------------------------------------------------------
@@ -135,22 +138,35 @@ namespace StormWinds
                 gustMag = Mathf.Clamp(gustMag, 0f, maxGustSpeed);
             }
 
-            _currentGustMag = gustMag;
+            // Altitude fadeout: scale winds down near the surface using radar altitude
+            float altScale = 1f;
+            if (fadeEndAlt > fadeStartAlt)
+            {
+                float radarAlt = Mathf.Max(0f, (float)FlightGlobals.ActiveVessel.radarAltitude);
+                if (radarAlt <= fadeStartAlt)
+                    altScale = groundWindFraction;
+                else if (radarAlt < fadeEndAlt)
+                    altScale = Mathf.Lerp(groundWindFraction, 1f, (radarAlt - fadeStartAlt) / (fadeEndAlt - fadeStartAlt));
+                // above fadeEndAlt: altScale stays 1f
+            }
+
+            float scaledGustMag = gustMag * altScale;
+            _currentGustMag = scaledGustMag;
             _gustTimer -= Time.fixedDeltaTime;
 
             if (_gustTimer <= 0f)
             {
                 _gustTimer = gustInterval;
-                _targetGust = (gustMag > 0f) ? RandomHorizontalGust(gustMag) : Vector3.zero;
+                _targetGust = (scaledGustMag > 0f) ? RandomHorizontalGust(scaledGustMag) : Vector3.zero;
             }
-            else if (gustMag <= 0f)
+            else if (scaledGustMag <= 0f)
             {
                 _targetGust = Vector3.zero;
             }
             else
             {
                 if (_targetGust != Vector3.zero)
-                    _targetGust = _targetGust.normalized * gustMag;
+                    _targetGust = _targetGust.normalized * scaledGustMag;
             }
 
             _currentGust = Vector3.Lerp(_currentGust, _targetGust, Time.fixedDeltaTime * gustLerpSpeed);
@@ -284,7 +300,7 @@ namespace StormWinds
 
                 if (debugMode)
                 {
-                    Debug.Log($"[StormWinds] Alt: {v.altitude:F0} | CenterMeters: {totalCenterMeters:F0} | AreaMeters: {totalAreaMeters:F0} | Gust: {_currentGustMag:F1} m/s");
+                    Debug.Log($"[StormWinds] Alt: {v.altitude:F0} | RadarAlt: {v.radarAltitude:F0} | CenterMeters: {totalCenterMeters:F0} | AreaMeters: {totalAreaMeters:F0} | Gust: {_currentGustMag:F1} m/s (scaled)");
                 }
             }
         }
@@ -347,6 +363,9 @@ namespace StormWinds
             TryParseFloat(n, "gustInterval", ref gustInterval);
             TryParseFloat(n, "gustLerpSpeed", ref gustLerpSpeed);
             TryParseFloat(n, "maxStormThickness", ref maxStormThickness);
+            TryParseFloat(n, "groundWindFraction", ref groundWindFraction);
+            TryParseFloat(n, "fadeStartAlt", ref fadeStartAlt);
+            TryParseFloat(n, "fadeEndAlt", ref fadeEndAlt);
 
             if (n.HasValue("enableDebug"))
                 bool.TryParse(n.GetValue("enableDebug"), out debugMode);
@@ -359,7 +378,7 @@ namespace StormWinds
                 areaWeight /= weightSum;
             }
 
-            Debug.Log($"[StormWinds] Config loaded. MaxGust={maxGustSpeed}, Threshold={densityThreshold}, Radius={areaSampleRadius}m");
+            Debug.Log($"[StormWinds] Config loaded. MaxGust={maxGustSpeed}, Threshold={densityThreshold}, Radius={areaSampleRadius}m, GroundFraction={groundWindFraction}, FadeEnd={fadeEndAlt}m");
         }
 
         private static void TryParseFloat(ConfigNode n, string key, ref float field)
