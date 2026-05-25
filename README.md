@@ -36,7 +36,7 @@ Please report any issues on GitHub with your KSP log and a short description.
 
 **Limitations**
 
-Effects can be strong at low altitudes under dense clouds, especially with mods which add more layers of cloud coverage. I considered adding a fadeout effect below a threshold altitude, but I also want there to be strong turbulence when flying in clouds near a mountain face
+Cannot be listed on CKAN due to unsatisfied dependency of Volumetric Clouds
 
 
 **Planned Features**
