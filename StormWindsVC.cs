@@ -188,25 +188,24 @@ namespace StormWinds
             }
 
             _currentGust = Vector3.Lerp(_currentGust, _targetGust, Time.fixedDeltaTime * config.gustLerpSpeed);
-        }
-
-        // -----------------------------------------------------------------------
-        // Per-frame update -- HUD
-        // -----------------------------------------------------------------------
-        public void Update()
-        {
-            if (FlightGlobals.ActiveVessel == null) return;
-
-            _msgTimer += Time.deltaTime;
-            if (_msgTimer >= MSG_INTERVAL)
+            
+            // -----------------------------------------------------------------------
+            // Wind debug HUD -- HUD
+            // -----------------------------------------------------------------------
+            if (defaultSettings.debugMode)
             {
-                _msgTimer = 0f;
-                if (_currentGustMag > 0.5f)
+                _msgTimer += Time.deltaTime;
+                
+                if (_msgTimer >= MSG_INTERVAL)
                 {
-                    ScreenMessages.PostScreenMessage(
-                        $"[Weather] {_currentGustMag:F1} m/s",
-                        MSG_INTERVAL + 0.1f,
-                        ScreenMessageStyle.UPPER_CENTER);
+                    _msgTimer = 0f;
+                    if (_currentGustMag > 0.5f)
+                    {
+                        ScreenMessages.PostScreenMessage(
+                            $"[Weather] {_currentGustMag:F1} m/s",
+                            MSG_INTERVAL + 0.1f,
+                            ScreenMessageStyle.UPPER_CENTER);
+                    }
                 }
             }
         }
