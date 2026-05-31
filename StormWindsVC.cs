@@ -42,6 +42,8 @@ namespace StormWinds
         // -----------------------------------------------------------------------
         private StormSettings defaultSettings = new StormSettings();
         private Dictionary<string, StormSettings> bodySettings = new Dictionary<string, StormSettings>(StringComparer.OrdinalIgnoreCase);
+        private CelestialBody _lastBody;
+        private StormSettings _cachedSettings;
 
         // -----------------------------------------------------------------------
         // Gust state
@@ -55,11 +57,35 @@ namespace StormWinds
         private float _currentGustMag = 0f;
 
         // -----------------------------------------------------------------------
-        // Timing
+        // Timing & UI
         // -----------------------------------------------------------------------
         private float _msgTimer = 0f;
         private const float MSG_INTERVAL = 1.5f;
         private Coroutine cloudSamplingRoutine;
+
+        // -----------------------------------------------------------------------
+        // Instance Tracking (Zombie Protection)
+        // -----------------------------------------------------------------------
+        private static StormWindsController ActiveInstance;
+
+        public void Awake()
+        {
+            // Set this newly spawned instance as the one and only active instance.
+            ActiveInstance = this;
+        }
+
+        public void OnDestroy()
+        {
+            // Clear the active instance only if we are the current active one
+            if (ActiveInstance == this)
+                ActiveInstance = null;
+
+            if (WindManager.Instance != null)
+                WindManager.Instance.DeregisterProvider(this);
+
+            if (cloudSamplingRoutine != null)
+                StopCoroutine(cloudSamplingRoutine);
+        }
 
         // -----------------------------------------------------------------------
         // IWindProvider
@@ -68,11 +94,15 @@ namespace StormWinds
 
         public Vector3 GetWind(CelestialBody body, Part part, Vector3 position)
         {
+            // ZOMBIE PROTECTION
+            if (this == null || ActiveInstance != this) return Vector3.zero;
+
             if (body == null || _currentGust == Vector3.zero) return Vector3.zero;
 
             if (part != null && FlightGlobals.ActiveVessel != null)
             {
-                if (part.vessel == FlightGlobals.ActiveVessel)
+                // Null check to prevent decoupled/exploding part NREs
+                if (part.vessel != null && part.vessel == FlightGlobals.ActiveVessel)
                     return _currentGust;
             }
 
@@ -101,10 +131,13 @@ namespace StormWinds
             int maxAttempts = 20; // 10 seconds total (20 * 0.5s)
             int attempts = 0;
 
+            // Cache the wait instruction to prevent garbage
+            WaitForSeconds wait = new WaitForSeconds(0.5f);
+
             while (WindManager.Instance == null && attempts < maxAttempts)
             {
                 attempts++;
-                yield return new WaitForSeconds(0.5f);
+                yield return wait;
             }
 
             if (WindManager.Instance != null)
@@ -116,15 +149,6 @@ namespace StormWinds
             {
                 Debug.LogWarning("[StormWinds] Failed to find WindAPI after 10 seconds. StormWinds will deactivate.");
             }
-        }
-
-        public void OnDestroy()
-        {
-            if (WindManager.Instance != null)
-                WindManager.Instance.DeregisterProvider(this);
-
-            if (cloudSamplingRoutine != null)
-                StopCoroutine(cloudSamplingRoutine);
         }
 
         // -----------------------------------------------------------------------
@@ -140,8 +164,16 @@ namespace StormWinds
             }
 
             Vessel v = FlightGlobals.ActiveVessel;
+
+            // Caching system for Dictionary lookups
+            if (_lastBody != v.mainBody || _cachedSettings == null)
+            {
+                _lastBody = v.mainBody;
+                _cachedSettings = GetCurrentSettings(v.mainBody.bodyName);
+            }
+            StormSettings config = _cachedSettings;
+
             float gustMag = 0f;
-            StormSettings config = GetCurrentSettings(v.mainBody.bodyName);
 
             // Ensure vessel is > 1m ASL, body has atmosphere, and vessel is inside atmosphere
             bool inValidAtmosphere = v.altitude > 1.0f && v.mainBody.atmosphere && v.altitude < v.mainBody.atmosphereDepth;
@@ -239,16 +271,26 @@ namespace StormWinds
         {
             Vector3[] sampleOffsets = new Vector3[8];
 
+            // Cache wait object to eliminate garbage generation
+            WaitForSeconds wait = new WaitForSeconds(1.0f);
+
             while (true)
             {
-                yield return new WaitForSeconds(1.0f);
+                yield return wait;
 
                 if (!FlightGlobals.ready || FlightGlobals.ActiveVessel == null)
                     continue;
 
                 Vessel v = FlightGlobals.ActiveVessel;
+
+                // Check cached settings instead of querying Dictionary every second
+                if (_lastBody != v.mainBody || _cachedSettings == null)
+                {
+                    _lastBody = v.mainBody;
+                    _cachedSettings = GetCurrentSettings(v.mainBody.bodyName);
+                }
+                StormSettings config = _cachedSettings;
                 string bodyName = v.mainBody.bodyName;
-                StormSettings config = GetCurrentSettings(bodyName);
 
                 if (v.altitude <= 1.0f || !v.mainBody.atmosphere || v.altitude >= v.mainBody.atmosphereDepth)
                 {
