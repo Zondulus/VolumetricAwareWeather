@@ -220,14 +220,14 @@ namespace StormWinds
             }
 
             _currentGust = Vector3.Lerp(_currentGust, _targetGust, Time.fixedDeltaTime * config.gustLerpSpeed);
-            
+
             // -----------------------------------------------------------------------
             // Wind debug HUD -- HUD
             // -----------------------------------------------------------------------
             if (defaultSettings.debugMode)
             {
                 _msgTimer += Time.deltaTime;
-                
+
                 if (_msgTimer >= MSG_INTERVAL)
                 {
                     _msgTimer = 0f;
